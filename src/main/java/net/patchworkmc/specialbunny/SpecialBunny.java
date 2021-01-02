@@ -14,13 +14,10 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.google.gson.*;
 
 public class SpecialBunny {
 	private static final int ALL = 0;
@@ -38,6 +35,9 @@ public class SpecialBunny {
 	// aggressive scan results
 	private static final int AGGRESSIVE_MCREATOR = 0;
 	private static final int AGGRESSIVE_MIXINS = 1;
+
+	// AtomicInteger so that we can increment in place
+	private static final HashMap<String, AtomicInteger> FORGE_CLASSES = new HashMap<>();
 
 	public static void main(String[] args) throws Throwable {
 		System.out.println("PatchworkMC SpecialBunny: Mass Mod Statistics");
@@ -122,9 +122,17 @@ public class SpecialBunny {
 					totals[NEITHER]++;
 				}
 
+				for (String clazz: info.forgeClasses) {
+					FORGE_CLASSES.computeIfAbsent(clazz, s -> new AtomicInteger()).incrementAndGet();
+				}
+
 				return FileVisitResult.CONTINUE;
 			}
 		});
+
+		Gson gson = new GsonBuilder().setPrettyPrinting().create();
+		String json = gson.toJson(decSortByValue(FORGE_CLASSES));
+		Files.write(Paths.get("./output.json"), json.getBytes(StandardCharsets.UTF_8));
 
 		System.out.println("Total mods: " + totals[ALL]);
 		System.out.println("Total mods using MCreator: " + totals[MCREATOR] + " (" + percent(totals[MCREATOR], totals[FORGE]) + " of Forge mods)");
@@ -139,5 +147,25 @@ public class SpecialBunny {
 
 	private static String percent(int value, int divisor) {
 		return ((value * 1000 / divisor) / 10D) + "%";
+	}
+
+	// function to sort hashmap by values
+	private static HashMap<String, Integer> decSortByValue(HashMap<String, AtomicInteger> hm) {
+		// Create a list from elements of HashMap
+		List<Map.Entry<String, AtomicInteger>> list =
+				new LinkedList<>(hm.entrySet());
+
+		// Sort the list
+		list.sort(Collections.reverseOrder(Comparator.comparingInt(e -> e.getValue().get())));
+
+		// put data from sorted list to hashmap
+		// Linked so that order is preserved.
+		HashMap<String, Integer> temp = new LinkedHashMap<>();
+
+		for (Map.Entry<String, AtomicInteger> aa : list) {
+			temp.put(aa.getKey(), aa.getValue().get());
+		}
+
+		return temp;
 	}
 }

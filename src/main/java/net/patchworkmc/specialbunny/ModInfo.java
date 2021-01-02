@@ -1,6 +1,8 @@
 package net.patchworkmc.specialbunny;
 
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
 
 public class ModInfo {
     public boolean isFabric = false;
@@ -16,6 +18,8 @@ public class ModInfo {
 
     // TODO: check for inner jars
     // public List<ModInfo> containedMods = new ArrayList();
+
+    public Set<String> forgeClasses = new HashSet<>();
 
     public enum ForgeType {
         NO,

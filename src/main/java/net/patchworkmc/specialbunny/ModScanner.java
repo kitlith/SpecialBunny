@@ -6,10 +6,12 @@ import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.objectweb.asm.ClassReader;
 
 public class ModScanner {
     private Optional<Path> outputPath = Optional.empty();
@@ -48,6 +50,10 @@ public class ModScanner {
         info.isMCreator = Files.exists(jar.getPath("/net/mcreator"));
 
         aggressiveScan(jar.getPath("/"), info); // MCreator and Mixins
+
+        if (info.isForge == ModInfo.ForgeType.YES && !info.isMCreator) {
+            getUsedForgeClasses(jar, info.forgeClasses);
+        }
 
         return info;
     }
@@ -198,5 +204,43 @@ public class ModScanner {
         }
 
         return modFolder;
+    }
+
+    // TODO: refactor scanner a bit so that you can just use portions of it?
+    private void getUsedForgeClasses(FileSystem fs, Set<String> forgeClasses) {
+        try {
+            Files.walkFileTree(fs.getPath("/"), new SimpleFileVisitor<Path>()  {
+                public FileVisitResult visitFile(Path file, BasicFileAttributes subAttributes) throws IOException {
+                    if (file.toString().endsWith(".class")) {
+                        byte[] content = Files.readAllBytes(file);
+                        ClassReader reader = new ClassReader(content);
+                        int maxIndex = reader.getItemCount();
+                        if (maxIndex < 1) {
+                            return FileVisitResult.CONTINUE;
+                        }
+                        int arrSize = 512;
+                        // 1-indexed :concern:
+                        for(int i = 1; i < maxIndex; i++) {
+                            char[] arr = new char[arrSize];
+                            try {
+                                reader.readConst(i, arr);
+                                // Sometimes constants can't be parsed for some reason... CBA to find out why so just swallow it.
+                                // Sometimes constants point to 0 offset for some reason and that explodes ASM
+                            } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException swallowed) {
+                                continue;
+                            }
+
+                            String className = new String(arr);
+                            if (className.startsWith("net/minecraftforge")) {
+                                forgeClasses.add(className.replace("\u0000", ""));
+                            }
+                        }
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
